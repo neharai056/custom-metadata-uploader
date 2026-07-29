@@ -39,11 +39,53 @@
 
     <section id="fieldsSection" class="card" hidden>
       <h2>3. Record Details</h2>
-      <form id="recordForm"></form>
-      <div class="row">
-        <button id="submitBtn">Insert Record</button>
+
+      <div class="mode-toggle">
+        <label class="radio-label">
+          <input type="radio" name="mode" id="modeSingle" checked /> Single record
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="mode" id="modeCsv" /> Bulk import (CSV)
+        </label>
       </div>
-      <p id="submitMsg" class="msg"></p>
+
+      <div id="singleRecordBlock">
+        <form id="recordForm"></form>
+        <div class="row">
+          <button id="submitBtn">Insert Record</button>
+        </div>
+        <p id="submitMsg" class="msg"></p>
+      </div>
+
+      <div id="csvImportBlock" hidden>
+        <p class="hint">
+          CSV headers must match field API names. <strong>MasterLabel</strong> and
+          <strong>DeveloperName</strong> are required on every row.
+        </p>
+        <div class="row">
+          <button id="downloadTemplateBtn" class="secondary">Download CSV template</button>
+        </div>
+        <label>CSV file
+          <input type="file" id="csvFile" accept=".csv,text/csv" />
+        </label>
+        <div class="row">
+          <button id="parseCsvBtn" class="secondary">Parse & Preview</button>
+        </div>
+        <p id="csvParseMsg" class="msg"></p>
+
+        <div id="csvPreviewWrap" hidden>
+          <div class="table-scroll">
+            <table id="csvPreviewTable"></table>
+          </div>
+          <div class="row">
+            <button id="importCsvBtn">Import All Rows</button>
+          </div>
+          <p id="csvImportMsg" class="msg"></p>
+          <div class="row" id="csvResultsRow" hidden>
+            <button id="downloadResultsBtn" class="secondary">Download Results Log</button>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
   <script src="popup.js"></script>

@@ -107,3 +107,59 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
   gap: 6px;
 }
 .checkbox-row input { width: auto; margin: 0; }
+
+.mode-toggle {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e1e5ea;
+}
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3c4b5c;
+  margin: 0;
+  cursor: pointer;
+}
+.radio-label input { width: auto; margin: 0; }
+
+.hint {
+  font-size: 11px;
+  color: #5c6b7a;
+  background: #f4f6f9;
+  border-radius: 5px;
+  padding: 8px;
+  margin: 0 0 10px 0;
+}
+
+.table-scroll {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid #e1e5ea;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+
+#csvPreviewTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+#csvPreviewTable th, #csvPreviewTable td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid #eef1f4;
+  white-space: nowrap;
+}
+#csvPreviewTable th {
+  background: #f4f6f9;
+  position: sticky;
+  top: 0;
+}
+#csvPreviewTable td.status-pending { color: #7a8794; }
+#csvPreviewTable td.status-success { color: #1a7a3d; font-weight: 600; }
+#csvPreviewTable td.status-error { color: #a4181e; font-weight: 600; }

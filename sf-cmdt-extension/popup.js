@@ -14,6 +14,20 @@ const els = {
   recordForm: document.getElementById("recordForm"),
   submitBtn: document.getElementById("submitBtn"),
   submitMsg: document.getElementById("submitMsg"),
+  modeSingle: document.getElementById("modeSingle"),
+  modeCsv: document.getElementById("modeCsv"),
+  singleRecordBlock: document.getElementById("singleRecordBlock"),
+  csvImportBlock: document.getElementById("csvImportBlock"),
+  downloadTemplateBtn: document.getElementById("downloadTemplateBtn"),
+  csvFile: document.getElementById("csvFile"),
+  parseCsvBtn: document.getElementById("parseCsvBtn"),
+  csvParseMsg: document.getElementById("csvParseMsg"),
+  csvPreviewWrap: document.getElementById("csvPreviewWrap"),
+  csvPreviewTable: document.getElementById("csvPreviewTable"),
+  importCsvBtn: document.getElementById("importCsvBtn"),
+  csvImportMsg: document.getElementById("csvImportMsg"),
+  csvResultsRow: document.getElementById("csvResultsRow"),
+  downloadResultsBtn: document.getElementById("downloadResultsBtn"),
 };
 
 let state = {
@@ -21,6 +35,9 @@ let state = {
   sessionId: "",
   fields: [],
   selectedType: "",
+  csvRows: [], // parsed row objects, in submission order
+  csvColumns: [], // header columns as found in the CSV
+  csvResults: [], // per-row {row, status, message}
 };
 
 // ---------- helpers ----------
@@ -172,6 +189,7 @@ async function onTypeSelected() {
   state.selectedType = typeName;
   els.fieldsSection.hidden = true;
   els.recordForm.innerHTML = "";
+  resetCsvUi();
 
   if (!typeName) return;
 
@@ -385,6 +403,341 @@ async function submitRecord() {
   }
 }
 
+// ---------- mode toggle ----------
+
+function toggleMode() {
+  const csvMode = els.modeCsv.checked;
+  els.singleRecordBlock.hidden = csvMode;
+  els.csvImportBlock.hidden = !csvMode;
+}
+
+function resetCsvUi() {
+  state.csvRows = [];
+  state.csvColumns = [];
+  state.csvResults = [];
+  els.csvFile.value = "";
+  els.csvPreviewWrap.hidden = true;
+  els.csvPreviewTable.innerHTML = "";
+  els.csvResultsRow.hidden = true;
+  setMsg(els.csvParseMsg, "");
+  setMsg(els.csvImportMsg, "");
+}
+
+// ---------- CSV template ----------
+
+function getAllInsertableFieldNames() {
+  return ["MasterLabel", "DeveloperName", ...state.fields.map((f) => f.name)];
+}
+
+function fieldTypeOf(name) {
+  if (name === "MasterLabel" || name === "DeveloperName") return "string";
+  const f = state.fields.find((f) => f.name === name);
+  return f ? f.type : "string";
+}
+
+function downloadCsvTemplate() {
+  if (!state.selectedType) return;
+  const columns = getAllInsertableFieldNames();
+  const csv = columns.map(csvEscape).join(",") + "\n";
+  triggerDownload(csv, `${state.selectedType}_template.csv`, "text/csv");
+}
+
+function triggerDownload(text, filename, mime) {
+  const blob = new Blob([text], { type: mime || "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function csvEscape(value) {
+  const s = value === undefined || value === null ? "" : String(value);
+  if (/[",\n]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+// ---------- CSV parsing (handles quoted fields, embedded commas/newlines) ----------
+
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+
+  const src = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  while (rows.length && rows[rows.length - 1].every((c) => c.trim() === "")) {
+    rows.pop();
+  }
+
+  if (rows.length === 0) return { headers: [], records: [] };
+
+  const headers = rows[0].map((h) => h.trim());
+  const records = rows.slice(1).map((r) => {
+    const obj = {};
+    headers.forEach((h, idx) => {
+      obj[h] = r[idx] !== undefined ? r[idx] : "";
+    });
+    return obj;
+  });
+
+  return { headers, records };
+}
+
+async function handleParseCsv() {
+  const file = els.csvFile.files && els.csvFile.files[0];
+  if (!file) {
+    setMsg(els.csvParseMsg, "Choose a CSV file first.", "error");
+    return;
+  }
+  if (!state.selectedType) {
+    setMsg(els.csvParseMsg, "Select a custom metadata type first.", "error");
+    return;
+  }
+
+  const text = await file.text();
+  const { headers, records } = parseCsvText(text);
+
+  if (records.length === 0) {
+    setMsg(els.csvParseMsg, "No data rows found in that CSV.", "error");
+    return;
+  }
+
+  const knownFields = new Set(getAllInsertableFieldNames());
+  const unknownColumns = headers.filter((h) => !knownFields.has(h));
+  const missingRequired = ["MasterLabel", "DeveloperName"].filter(
+    (req) => !headers.includes(req)
+  );
+
+  if (missingRequired.length) {
+    setMsg(
+      els.csvParseMsg,
+      `CSV is missing required column(s): ${missingRequired.join(", ")}.`,
+      "error"
+    );
+    els.csvPreviewWrap.hidden = true;
+    return;
+  }
+
+  state.csvColumns = headers;
+  state.csvRows = records;
+  state.csvResults = records.map(() => ({ status: "pending", message: "" }));
+
+  renderCsvPreview();
+
+  let msg = `Parsed ${records.length} row(s), ${headers.length} column(s).`;
+  if (unknownColumns.length) {
+    msg += ` Note: column(s) not recognized on this type and will be ignored: ${unknownColumns.join(", ")}.`;
+  }
+  setMsg(els.csvParseMsg, msg);
+  els.csvPreviewWrap.hidden = false;
+  els.csvResultsRow.hidden = true;
+  setMsg(els.csvImportMsg, "");
+}
+
+function renderCsvPreview() {
+  const table = els.csvPreviewTable;
+  table.innerHTML = "";
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["#", ...state.csvColumns, "Status"].forEach((h) => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  state.csvRows.forEach((rec, idx) => {
+    const tr = document.createElement("tr");
+    tr.id = `csvrow_${idx}`;
+
+    const idxCell = document.createElement("td");
+    idxCell.textContent = idx + 1;
+    tr.appendChild(idxCell);
+
+    state.csvColumns.forEach((col) => {
+      const td = document.createElement("td");
+      td.textContent = rec[col];
+      tr.appendChild(td);
+    });
+
+    const statusCell = document.createElement("td");
+    statusCell.className = "status-pending";
+    statusCell.textContent = "Pending";
+    statusCell.id = `csvstatus_${idx}`;
+    tr.appendChild(statusCell);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+}
+
+function coerceCsvValue(name, rawValue) {
+  const type = fieldTypeOf(name);
+  const raw = (rawValue ?? "").trim();
+  if (raw === "") return undefined;
+
+  if (type === "boolean") {
+    return ["true", "1", "yes", "y"].includes(raw.toLowerCase());
+  }
+  if (type === "int") {
+    const n = parseInt(raw, 10);
+    return Number.isNaN(n) ? undefined : n;
+  }
+  if (type === "double" || type === "currency" || type === "percent") {
+    const n = parseFloat(raw);
+    return Number.isNaN(n) ? undefined : n;
+  }
+  return raw;
+}
+
+function csvRowToRecord(rec) {
+  const record = {};
+  const knownFields = new Set(getAllInsertableFieldNames());
+  for (const col of state.csvColumns) {
+    if (!knownFields.has(col)) continue;
+    const value = coerceCsvValue(col, rec[col]);
+    if (value !== undefined) record[col] = value;
+  }
+  return record;
+}
+
+async function importAllCsvRows() {
+  if (!state.csvRows.length || !state.selectedType) return;
+
+  els.importCsvBtn.disabled = true;
+  els.csvResultsRow.hidden = true;
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (let idx = 0; idx < state.csvRows.length; idx++) {
+    const statusCell = document.getElementById(`csvstatus_${idx}`);
+    setMsg(
+      els.csvImportMsg,
+      `Importing row ${idx + 1} of ${state.csvRows.length}... (${successCount} succeeded, ${errorCount} failed so far)`
+    );
+
+    const record = csvRowToRecord(state.csvRows[idx]);
+
+    if (!record.MasterLabel || !record.DeveloperName) {
+      state.csvResults[idx] = { status: "error", message: "Missing Label or Name" };
+      if (statusCell) {
+        statusCell.className = "status-error";
+        statusCell.textContent = "Error: missing Label/Name";
+      }
+      errorCount++;
+      continue;
+    }
+
+    try {
+      const resp = await sfFetch(`/services/data/${API_VERSION}/sobjects/${state.selectedType}/`, {
+        method: "POST",
+        body: JSON.stringify(record),
+      });
+      const body = await resp.json().catch(() => null);
+
+      if (resp.ok && body && body.success) {
+        state.csvResults[idx] = { status: "success", message: `Id: ${body.id}` };
+        if (statusCell) {
+          statusCell.className = "status-success";
+          statusCell.textContent = `Success (${body.id})`;
+        }
+        successCount++;
+      } else {
+        const errText = Array.isArray(body)
+          ? body.map((e) => `${e.errorCode}: ${e.message}`).join(" | ")
+          : JSON.stringify(body);
+        state.csvResults[idx] = { status: "error", message: errText };
+        if (statusCell) {
+          statusCell.className = "status-error";
+          statusCell.textContent = "Error";
+          statusCell.title = errText;
+        }
+        errorCount++;
+      }
+    } catch (err) {
+      state.csvResults[idx] = { status: "error", message: err.message };
+      if (statusCell) {
+        statusCell.className = "status-error";
+        statusCell.textContent = "Error";
+        statusCell.title = err.message;
+      }
+      errorCount++;
+    }
+  }
+
+  setMsg(
+    els.csvImportMsg,
+    `Done. ${successCount} succeeded, ${errorCount} failed out of ${state.csvRows.length}.`,
+    errorCount ? "error" : "success"
+  );
+  els.csvResultsRow.hidden = false;
+  els.importCsvBtn.disabled = false;
+}
+
+function downloadResultsLog() {
+  const header = ["Row", ...state.csvColumns, "Status", "Message"];
+  const lines = [header.map(csvEscape).join(",")];
+
+  state.csvRows.forEach((rec, idx) => {
+    const result = state.csvResults[idx] || { status: "", message: "" };
+    const cells = [
+      idx + 1,
+      ...state.csvColumns.map((c) => rec[c]),
+      result.status,
+      result.message,
+    ];
+    lines.push(cells.map(csvEscape).join(","));
+  });
+
+  triggerDownload(lines.join("\n"), `${state.selectedType}_import_results.csv`, "text/csv");
+}
+
 // ---------- wire up ----------
 
 els.autoDetectBtn.addEventListener("click", autoDetectFromActiveTab);
@@ -394,6 +747,12 @@ els.submitBtn.addEventListener("click", (e) => {
   e.preventDefault();
   submitRecord();
 });
+els.modeSingle.addEventListener("change", toggleMode);
+els.modeCsv.addEventListener("change", toggleMode);
+els.downloadTemplateBtn.addEventListener("click", downloadCsvTemplate);
+els.parseCsvBtn.addEventListener("click", handleParseCsv);
+els.importCsvBtn.addEventListener("click", importAllCsvRows);
+els.downloadResultsBtn.addEventListener("click", downloadResultsLog);
 
 // Try auto-detect on popup open for convenience.
 autoDetectFromActiveTab();

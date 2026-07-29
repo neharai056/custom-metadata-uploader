@@ -32,6 +32,15 @@ your browser, using the REST API.
 7. The new record's Id is shown on success, or the Salesforce error message on
    failure (e.g. validation rule, required field, FLS).
 
+### Bulk import via CSV
+
+- Switch the mode to **Bulk import (CSV)** after selecting a custom metadata type.
+- Download the template, fill it with field API names, and include **MasterLabel**
+  and **DeveloperName** on every row.
+- Select the CSV file, then click **Parse & Preview**.
+- Review the preview, then click **Import All Rows**.
+- Optionally download the results log after import.
+
 ## How it works
 
 - Uses the standard REST API (`/services/data/vXX.0/sobjects/...`), not the
