@@ -95,15 +95,15 @@ function escapeXml(value) {
 
 function buildMetadataValueXml(value) {
   if (value === null || value === undefined) {
-    return `<value xsi:type="xsd:string"></value>`;
+    return `<met:value xsi:type="xsd:string"></met:value>`;
   }
   if (typeof value === "boolean") {
-    return `<value xsi:type="xsd:boolean">${String(value)}</value>`;
+    return `<met:value xsi:type="xsd:boolean">${String(value)}</met:value>`;
   }
   if (typeof value === "number") {
-    return `<value xsi:type="xsd:double">${String(value)}</value>`;
+    return `<met:value xsi:type="xsd:double">${String(value)}</met:value>`;
   }
-  return `<value xsi:type="xsd:string">${escapeXml(String(value))}</value>`;
+  return `<met:value xsi:type="xsd:string">${escapeXml(String(value))}</met:value>`;
 }
 
 function buildCustomMetadataXml(typeName, record, index) {
@@ -114,7 +114,7 @@ function buildCustomMetadataXml(typeName, record, index) {
     .map(([key, value]) => `      <met:values>\n        <met:field>${escapeXml(key)}</met:field>\n        ${buildMetadataValueXml(value)}\n      </met:values>`)
     .join("\n");
 
-  return `<met:metadata xsi:type="CustomMetadata">\n  <met:fullName>${escapeXml(`${typeName}.${developerName}`)}</met:fullName>\n  <met:label>${escapeXml(label)}</met:label>\n${valuesXml ? `${valuesXml}\n` : ""}  </met:metadata>`;
+  return `<met:metadata xsi:type="met:CustomMetadata">\n  <met:fullName>${escapeXml(`${typeName}.${developerName}`)}</met:fullName>\n  <met:label>${escapeXml(label)}</met:label>\n${valuesXml ? `${valuesXml}\n` : ""}  </met:metadata>`;
 }
 
 function buildMetadataSoapBody(typeName, records) {
