@@ -148,10 +148,12 @@ function normalizeInstanceUrl(url) {
 }
 
 async function sfFetch(path, options = {}) {
-  const url = `${state.instanceUrl}${path}`;
+  const cacheBust = options.noCache ? `${path.includes("?") ? "&" : "?"}_=${Date.now()}` : "";
+  const url = `${state.instanceUrl}${path}${cacheBust}`;
   addDebugLog(`Request -> ${options.method || "GET"} ${path}`);
   const resp = await fetch(url, {
     ...options,
+    cache: options.noCache ? "no-store" : "default",
     headers: {
       Authorization: `Bearer ${state.sessionId}`,
       Accept: "application/json",
@@ -245,7 +247,7 @@ async function connect() {
   els.connectBtn.disabled = true;
 
   try {
-    const resp = await sfFetch(`/services/data/${API_VERSION}/sobjects/`);
+    const resp = await sfFetch(`/services/data/${API_VERSION}/sobjects/`, { noCache: true });
     if (!resp.ok) {
       const body = await resp.text();
       throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
@@ -315,7 +317,7 @@ async function onTypeSelected() {
 
   setMsg(els.typeMsg, "Loading field metadata...");
   try {
-    const resp = await sfFetch(`/services/data/${API_VERSION}/sobjects/${typeName}/describe/`);
+    const resp = await sfFetch(`/services/data/${API_VERSION}/sobjects/${typeName}/describe/`, { noCache: true });
     if (!resp.ok) {
       const body = await resp.text();
       throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
