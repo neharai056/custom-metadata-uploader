@@ -63,7 +63,10 @@ async function autoDetectFromActiveTab() {
     const tabUrl = new URL(tab.url);
     const hostname = tabUrl.hostname;
 
-    if (!/salesforce\.com$|force\.com$/.test(hostname)) {
+    const isSalesforceHost =
+      /salesforce\.com$|force\.com$|salesforce-setup\.com$|salesforce-sites\.com$/.test(hostname);
+
+    if (!isSalesforceHost) {
       setMsg(
         els.connectionMsg,
         "Active tab doesn't look like a Salesforce page. Enter instance URL and session manually.",
@@ -72,7 +75,8 @@ async function autoDetectFromActiveTab() {
       return;
     }
 
-    const instanceUrl = `${tabUrl.protocol}//${hostname}`;
+    const apiHostname = hostname.replace(/\.salesforce-setup\.com$/, ".salesforce.com");
+    const instanceUrl = `${tabUrl.protocol}//${apiHostname}`;
     els.instanceUrl.value = instanceUrl;
 
     // Try to find the 'sid' session cookie for this host (and parent domain).
