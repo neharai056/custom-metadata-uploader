@@ -389,9 +389,7 @@ async function submitRecord() {
     if (resp.ok && body && body.success) {
       setMsg(els.submitMsg, `Record created successfully. Id: ${body.id}`, "success");
     } else {
-      const errText = Array.isArray(body)
-        ? body.map((e) => `${e.errorCode}: ${e.message}`).join("\n")
-        : JSON.stringify(body);
+      const errText = explainInsertFailure(formatSfErrorMessage(body, "Unknown Salesforce error"));
       setMsg(els.submitMsg, `Insert failed:\n${errText}`, "error");
     }
   } catch (err) {
@@ -459,6 +457,34 @@ function csvEscape(value) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
+}
+
+function formatSfErrorMessage(body, fallback = "Unknown Salesforce error") {
+  if (!body) return fallback;
+
+  if (typeof body === "string") return body;
+
+  if (Array.isArray(body)) {
+    return body.map((e) => `${e.errorCode || "ERROR"}: ${e.message || JSON.stringify(e)}`).join(" | ");
+  }
+
+  if (typeof body === "object") {
+    if (body.message) return body.message;
+    if (body.errorCode && body.message) return `${body.errorCode}: ${body.message}`;
+    if (body.error_description) return body.error_description;
+  }
+
+  return fallback;
+}
+
+function explainInsertFailure(message) {
+  if (!message) return message;
+
+  const lower = message.toLowerCase();
+  if (/cannot_insert_update_activate_entity|entity type cannot be inserted|not insertable|not creatable|insufficient access/i.test(lower)) {
+    return `${message}\nThis usually means a trigger/flow, permission issue, or org-level restriction is blocking inserts for this Custom Metadata Type.`;
+  }
+  return message;
 }
 
 // ---------- CSV parsing (handles quoted fields, embedded commas/newlines) ----------
@@ -688,9 +714,7 @@ async function importAllCsvRows() {
         }
         successCount++;
       } else {
-        const errText = Array.isArray(body)
-          ? body.map((e) => `${e.errorCode}: ${e.message}`).join(" | ")
-          : JSON.stringify(body);
+        const errText = explainInsertFailure(formatSfErrorMessage(body, "Unknown Salesforce error"));
         state.csvResults[idx] = { status: "error", message: errText };
         if (statusCell) {
           statusCell.className = "status-error";
