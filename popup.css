@@ -91,6 +91,35 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .msg.error { color: #a4181e; }
 .msg.success { color: #1a7a3d; }
 
+.debug-block {
+  margin-top: 10px;
+  border: 1px solid #e1e5ea;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fcfdff;
+}
+.debug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.debug-log {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 140px;
+  overflow: auto;
+  color: #4a5568;
+}
+button.small {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
 .field-block {
   margin-bottom: 10px;
 }

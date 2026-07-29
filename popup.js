@@ -28,6 +28,8 @@ const els = {
   csvImportMsg: document.getElementById("csvImportMsg"),
   csvResultsRow: document.getElementById("csvResultsRow"),
   downloadResultsBtn: document.getElementById("downloadResultsBtn"),
+  debugLog: document.getElementById("debugLog"),
+  copyDebugBtn: document.getElementById("copyDebugBtn"),
 };
 
 let state = {
@@ -38,9 +40,22 @@ let state = {
   csvRows: [], // parsed row objects, in submission order
   csvColumns: [], // header columns as found in the CSV
   csvResults: [], // per-row {row, status, message}
+  debugLines: [],
 };
 
 // ---------- helpers ----------
+
+function addDebugLog(message) {
+  const stamp = new Date().toLocaleTimeString();
+  const line = `[${stamp}] ${message}`;
+  state.debugLines.push(line);
+  if (state.debugLines.length > 80) {
+    state.debugLines = state.debugLines.slice(-80);
+  }
+  if (els.debugLog) {
+    els.debugLog.textContent = state.debugLines.join("\n");
+  }
+}
 
 function setStatus(kind, text) {
   els.connStatus.className = `status status--${kind}`;
@@ -59,6 +74,7 @@ function normalizeInstanceUrl(url) {
 
 async function sfFetch(path, options = {}) {
   const url = `${state.instanceUrl}${path}`;
+  addDebugLog(`Request -> ${options.method || "GET"} ${path}`);
   const resp = await fetch(url, {
     ...options,
     headers: {
@@ -68,7 +84,14 @@ async function sfFetch(path, options = {}) {
       ...(options.headers || {}),
     },
   });
-  return resp;
+
+  const text = await resp.text().catch(() => "");
+  addDebugLog(`Response <- ${resp.status} ${path} ${text.slice(0, 220)}`);
+  return new Response(text, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers: resp.headers,
+  });
 }
 
 async function createRecord(typeName, record) {
@@ -106,6 +129,7 @@ async function autoDetectFromActiveTab() {
   setMsg(els.connectionMsg, "Detecting active tab...");
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    addDebugLog(`Auto-detect tab: ${tab && tab.url ? tab.url : "none"}`);
     if (!tab || !tab.url) throw new Error("No active tab found.");
     const tabUrl = new URL(tab.url);
     const hostname = tabUrl.hostname;
@@ -114,6 +138,7 @@ async function autoDetectFromActiveTab() {
       /salesforce\.com$|force\.com$|salesforce-setup\.com$|salesforce-sites\.com$/.test(hostname);
 
     if (!isSalesforceHost) {
+      addDebugLog(`Auto-detect rejected host: ${hostname}`);
       setMsg(
         els.connectionMsg,
         "Active tab doesn't look like a Salesforce page. Enter instance URL and session manually.",
@@ -141,6 +166,7 @@ async function autoDetectFromActiveTab() {
     }
 
     if (sidCookie) {
+      addDebugLog(`Auto-detect found sid cookie on ${hostname}`);
       els.sessionId.value = sidCookie.value;
       setMsg(els.connectionMsg, "Detected instance URL and session. Click Connect.");
     } else {
@@ -157,6 +183,7 @@ async function autoDetectFromActiveTab() {
 
 async function connect() {
   const instanceUrl = normalizeInstanceUrl(els.instanceUrl.value.trim());
+  addDebugLog(`Connect clicked with instance: ${instanceUrl}`);
   const sessionId = els.sessionId.value.trim();
 
   if (!instanceUrl || !sessionId) {
@@ -177,6 +204,7 @@ async function connect() {
       throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
     }
     const data = await resp.json();
+    addDebugLog(`Connected successfully; discovered ${data.sobjects ? data.sobjects.length : 0} sobjects`);
     setStatus("ok", "Connected");
     setMsg(els.connectionMsg, "Connected successfully.", "success");
 
@@ -231,6 +259,7 @@ async function onTypeSelected() {
       throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
     }
     const describe = await resp.json();
+    addDebugLog(`Loaded describe for ${typeName}; fields=${describe.fields ? describe.fields.length : 0}`);
 
     // Fields we don't want to show / can't set directly.
     const excluded = new Set([
@@ -399,6 +428,7 @@ async function submitRecord() {
   }
 
   const record = collectFormValues();
+  addDebugLog(`Single insert payload for ${state.selectedType}: ${JSON.stringify(record)}`);
 
   if (!record.MasterLabel || !record.DeveloperName) {
     setMsg(els.submitMsg, "Label and Name (Developer Name) are required.", "error");
@@ -415,6 +445,7 @@ async function submitRecord() {
       setMsg(els.submitMsg, `Record created successfully. Id: ${body.id}`, "success");
     } else {
       const errText = explainInsertFailure(formatSfErrorMessage(body, "Unknown Salesforce error"));
+      addDebugLog(`Single insert failed: ${errText}`);
       setMsg(els.submitMsg, `Insert failed:\n${errText}`, "error");
     }
   } catch (err) {
@@ -718,6 +749,7 @@ async function importAllCsvRows() {
     );
 
     const record = csvRowToRecord(state.csvRows[idx]);
+    addDebugLog(`CSV row ${idx + 1} payload: ${JSON.stringify(record)}`);
 
     if (!record.MasterLabel || !record.DeveloperName) {
       state.csvResults[idx] = { status: "error", message: "Missing Label or Name" };
@@ -733,6 +765,7 @@ async function importAllCsvRows() {
       const { resp, body } = await createRecord(state.selectedType, record);
 
       if (resp.ok && body && body.success) {
+        addDebugLog(`CSV row ${idx + 1} success: ${JSON.stringify(body)}`);
         state.csvResults[idx] = { status: "success", message: `Id: ${body.id}` };
         if (statusCell) {
           statusCell.className = "status-success";
@@ -741,6 +774,7 @@ async function importAllCsvRows() {
         successCount++;
       } else {
         const errText = explainInsertFailure(formatSfErrorMessage(body, "Unknown Salesforce error"));
+        addDebugLog(`CSV row ${idx + 1} failed: ${errText}`);
         state.csvResults[idx] = { status: "error", message: errText };
         if (statusCell) {
           statusCell.className = "status-error";
@@ -802,6 +836,14 @@ els.downloadTemplateBtn.addEventListener("click", downloadCsvTemplate);
 els.parseCsvBtn.addEventListener("click", handleParseCsv);
 els.importCsvBtn.addEventListener("click", importAllCsvRows);
 els.downloadResultsBtn.addEventListener("click", downloadResultsLog);
+els.copyDebugBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(state.debugLines.join("\n"));
+    setMsg(els.connectionMsg, "Debug log copied to clipboard.", "success");
+  } catch (err) {
+    setMsg(els.connectionMsg, `Could not copy debug log: ${err.message}`, "error");
+  }
+});
 
 // Try auto-detect on popup open for convenience.
 autoDetectFromActiveTab();
