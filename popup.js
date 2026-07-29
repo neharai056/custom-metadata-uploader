@@ -64,6 +64,12 @@ function setStatus(kind, text) {
   els.connStatus.textContent = text;
 }
 
+function syncSessionState() {
+  state.instanceUrl = normalizeInstanceUrl(els.instanceUrl.value.trim());
+  state.sessionId = els.sessionId.value.trim();
+  refreshAuthExample();
+}
+
 function refreshAuthExample() {
   if (!els.authExample) return;
   const instanceUrl = normalizeInstanceUrl(els.instanceUrl.value.trim()) || "https://your-org.my.salesforce.com";
@@ -182,6 +188,7 @@ async function autoDetectFromActiveTab() {
     if (sidCookie) {
       addDebugLog(`Auto-detect found sid cookie on ${hostname}`);
       els.sessionId.value = sidCookie.value;
+      syncSessionState();
       setMsg(els.connectionMsg, "Detected instance URL and session. Click Connect.");
     } else {
       setMsg(
@@ -199,14 +206,13 @@ async function connect() {
   const instanceUrl = normalizeInstanceUrl(els.instanceUrl.value.trim());
   addDebugLog(`Connect clicked with instance: ${instanceUrl}`);
   const sessionId = els.sessionId.value.trim();
+  state.instanceUrl = instanceUrl;
+  state.sessionId = sessionId;
 
   if (!instanceUrl || !sessionId) {
     setMsg(els.connectionMsg, "Instance URL and session/token are both required.", "error");
     return;
   }
-
-  state.instanceUrl = instanceUrl;
-  state.sessionId = sessionId;
 
   setMsg(els.connectionMsg, "Validating connection...");
   els.connectBtn.disabled = true;
@@ -868,10 +874,10 @@ els.copyAuthBtn.addEventListener("click", async () => {
 });
 
 [els.instanceUrl, els.sessionId].forEach((el) => {
-  el.addEventListener("input", refreshAuthExample);
+  el.addEventListener("input", syncSessionState);
 });
 
-refreshAuthExample();
+syncSessionState();
 
 // Try auto-detect on popup open for convenience.
 autoDetectFromActiveTab();
