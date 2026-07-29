@@ -262,6 +262,13 @@ async function connect() {
 
     populateTypeDropdown(mdtTypes);
     els.typeSection.hidden = false;
+
+    if (state.selectedType) {
+      const exists = mdtTypes.some((t) => t.name === state.selectedType);
+      if (exists) {
+        await refreshSelectedTypeFields();
+      }
+    }
   } catch (err) {
     setStatus("error", "Connection failed");
     setMsg(els.connectionMsg, `Connection failed: ${err.message}`, "error");
@@ -287,6 +294,14 @@ function populateTypeDropdown(types) {
   } else {
     setMsg(els.typeMsg, `${types.length} custom metadata type(s) found.`);
   }
+}
+
+async function refreshSelectedTypeFields() {
+  if (!state.selectedType) return;
+  if (els.typeSelect.value !== state.selectedType) {
+    els.typeSelect.value = state.selectedType;
+  }
+  return onTypeSelected();
 }
 
 async function onTypeSelected() {
