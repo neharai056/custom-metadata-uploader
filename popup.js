@@ -32,6 +32,8 @@ const els = {
   copyDebugBtn: document.getElementById("copyDebugBtn"),
   authExample: document.getElementById("authExample"),
   copyAuthBtn: document.getElementById("copyAuthBtn"),
+  apexExample: document.getElementById("apexExample"),
+  copyApexBtn: document.getElementById("copyApexBtn"),
 };
 
 let state = {
@@ -82,6 +84,43 @@ function refreshAuthExample() {
   els.authExample.textContent = curl;
 }
 
+function buildMetadataDeployPayload(records, typeName) {
+  const metadataItems = records.map((record, index) => {
+    const developerName = record.DeveloperName || `Record_${index + 1}`;
+    const label = record.MasterLabel || `Record ${index + 1}`;
+    const values = Object.entries(record)
+      .filter(([key]) => !["MasterLabel", "DeveloperName"].includes(key))
+      .map(([key, value]) => ({
+        field: key,
+        value,
+      }));
+
+    return {
+      fullName: `${typeName}.${developerName}`,
+      label,
+      values,
+      type: "CustomMetadata",
+    };
+  });
+
+  return {
+    metadata: metadataItems,
+  };
+}
+
+function buildMetadataApiBody(records, typeName) {
+  const payload = buildMetadataDeployPayload(records, typeName);
+  return JSON.stringify(payload);
+}
+
+function refreshApexExample() {
+  if (!els.apexExample) return;
+  const record = collectFormValues();
+  const typeName = state.selectedType || "Booking_Config__mdt";
+  const body = buildMetadataApiBody([record], typeName);
+  els.apexExample.textContent = body;
+}
+
 function setMsg(el, text, kind) {
   el.textContent = text || "";
   el.className = "msg" + (kind ? ` ${kind}` : "");
@@ -114,34 +153,6 @@ async function sfFetch(path, options = {}) {
   });
 }
 
-async function createRecord(typeName, record) {
-  const endpoints = [
-    `/services/data/${API_VERSION}/sobjects/${encodeURIComponent(typeName)}/`,
-    `/services/data/${API_VERSION}/sobjects/${encodeURIComponent(typeName)}`,
-  ];
-
-  let lastResult = null;
-
-  for (const endpoint of endpoints) {
-    const resp = await sfFetch(endpoint, {
-      method: "POST",
-      body: JSON.stringify(record),
-    });
-    const body = await resp.json().catch(() => null);
-
-    if (resp.ok && body && body.success) {
-      return { resp, body };
-    }
-
-    lastResult = { resp, body };
-
-    if (resp.status !== 400 && resp.status !== 404) {
-      break;
-    }
-  }
-
-  return lastResult;
-}
 
 // ---------- step 1: connection ----------
 
@@ -448,7 +459,7 @@ async function submitRecord() {
   }
 
   const record = collectFormValues();
-  addDebugLog(`Single insert payload for ${state.selectedType}: ${JSON.stringify(record)}`);
+  addDebugLog(`Metadata API payload for ${state.selectedType}: ${JSON.stringify(record)}`);
 
   if (!record.MasterLabel || !record.DeveloperName) {
     setMsg(els.submitMsg, "Label and Name (Developer Name) are required.", "error");
@@ -456,20 +467,29 @@ async function submitRecord() {
   }
 
   els.submitBtn.disabled = true;
-  setMsg(els.submitMsg, "Inserting record...");
+  setMsg(els.submitMsg, "Submitting metadata deployment...");
 
   try {
-    const { resp, body } = await createRecord(state.selectedType, record);
+    const body = buildMetadataApiBody([record], state.selectedType);
+    const resp = await sfFetch(`/services/metadata/${API_VERSION}/deployRequest`, {
+      method: "POST",
+      body,
+      headers: {
+        "Content-Type": "application/json",
+        "Sforce-Disable-Feed-Tracking": "true",
+      },
+    });
 
-    if (resp.ok && body && body.success) {
-      setMsg(els.submitMsg, `Record created successfully. Id: ${body.id}`, "success");
+    const text = await resp.text();
+    addDebugLog(`Metadata deploy response: ${text}`);
+
+    if (resp.ok) {
+      setMsg(els.submitMsg, `Deployment accepted. Response: ${text}`, "success");
     } else {
-      const errText = explainInsertFailure(formatSfErrorMessage(body, "Unknown Salesforce error"));
-      addDebugLog(`Single insert failed: ${errText}`);
-      setMsg(els.submitMsg, `Insert failed:\n${errText}`, "error");
+      setMsg(els.submitMsg, `Metadata deployment failed: ${text}`, "error");
     }
   } catch (err) {
-    setMsg(els.submitMsg, `Insert failed: ${err.message}`, "error");
+    setMsg(els.submitMsg, `Failed to submit deployment: ${err.message}`, "error");
   } finally {
     els.submitBtn.disabled = false;
   }
@@ -758,67 +778,43 @@ async function importAllCsvRows() {
 
   els.importCsvBtn.disabled = true;
   els.csvResultsRow.hidden = true;
-  let successCount = 0;
-  let errorCount = 0;
 
+  const validRows = [];
   for (let idx = 0; idx < state.csvRows.length; idx++) {
-    const statusCell = document.getElementById(`csvstatus_${idx}`);
-    setMsg(
-      els.csvImportMsg,
-      `Importing row ${idx + 1} of ${state.csvRows.length}... (${successCount} succeeded, ${errorCount} failed so far)`
-    );
-
     const record = csvRowToRecord(state.csvRows[idx]);
     addDebugLog(`CSV row ${idx + 1} payload: ${JSON.stringify(record)}`);
 
     if (!record.MasterLabel || !record.DeveloperName) {
       state.csvResults[idx] = { status: "error", message: "Missing Label or Name" };
-      if (statusCell) {
-        statusCell.className = "status-error";
-        statusCell.textContent = "Error: missing Label/Name";
-      }
-      errorCount++;
       continue;
     }
 
-    try {
-      const { resp, body } = await createRecord(state.selectedType, record);
-
-      if (resp.ok && body && body.success) {
-        addDebugLog(`CSV row ${idx + 1} success: ${JSON.stringify(body)}`);
-        state.csvResults[idx] = { status: "success", message: `Id: ${body.id}` };
-        if (statusCell) {
-          statusCell.className = "status-success";
-          statusCell.textContent = `Success (${body.id})`;
-        }
-        successCount++;
-      } else {
-        const errText = explainInsertFailure(formatSfErrorMessage(body, "Unknown Salesforce error"));
-        addDebugLog(`CSV row ${idx + 1} failed: ${errText}`);
-        state.csvResults[idx] = { status: "error", message: errText };
-        if (statusCell) {
-          statusCell.className = "status-error";
-          statusCell.textContent = "Error";
-          statusCell.title = errText;
-        }
-        errorCount++;
-      }
-    } catch (err) {
-      state.csvResults[idx] = { status: "error", message: err.message };
-      if (statusCell) {
-        statusCell.className = "status-error";
-        statusCell.textContent = "Error";
-        statusCell.title = err.message;
-      }
-      errorCount++;
-    }
+    validRows.push(record);
   }
 
-  setMsg(
-    els.csvImportMsg,
-    `Done. ${successCount} succeeded, ${errorCount} failed out of ${state.csvRows.length}.`,
-    errorCount ? "error" : "success"
-  );
+  try {
+    const body = buildMetadataApiBody(validRows, state.selectedType);
+    const resp = await sfFetch(`/services/metadata/${API_VERSION}/deployRequest`, {
+      method: "POST",
+      body,
+      headers: {
+        "Content-Type": "application/json",
+        "Sforce-Disable-Feed-Tracking": "true",
+      },
+    });
+
+    const text = await resp.text();
+    addDebugLog(`Metadata deploy response: ${text}`);
+
+    if (resp.ok) {
+      setMsg(els.csvImportMsg, `Deployment accepted for ${validRows.length} record(s). Response: ${text}`, "success");
+    } else {
+      setMsg(els.csvImportMsg, `Metadata deployment failed: ${text}`, "error");
+    }
+  } catch (err) {
+    setMsg(els.csvImportMsg, `Metadata deployment failed: ${err.message}`, "error");
+  }
+
   els.csvResultsRow.hidden = false;
   els.importCsvBtn.disabled = false;
 }
@@ -872,12 +868,24 @@ els.copyAuthBtn.addEventListener("click", async () => {
     setMsg(els.connectionMsg, `Could not copy auth example: ${err.message}`, "error");
   }
 });
+els.copyApexBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(els.apexExample.textContent || "");
+    setMsg(els.connectionMsg, "Apex example copied to clipboard.", "success");
+  } catch (err) {
+    setMsg(els.connectionMsg, `Could not copy apex example: ${err.message}`, "error");
+  }
+});
 
 [els.instanceUrl, els.sessionId].forEach((el) => {
   el.addEventListener("input", syncSessionState);
 });
 
+els.recordForm.addEventListener("input", refreshApexExample);
+els.recordForm.addEventListener("change", refreshApexExample);
+
 syncSessionState();
+refreshApexExample();
 
 // Try auto-detect on popup open for convenience.
 autoDetectFromActiveTab();
