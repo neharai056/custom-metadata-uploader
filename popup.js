@@ -213,7 +213,7 @@ async function onTypeSelected() {
       "Label",
     ]);
 
-    const relevantFields = describe.fields.filter((f) => !excluded.has(f.name));
+    const relevantFields = describe.fields.filter((f) => !excluded.has(f.name) && !isExcludedInsertField(f.name));
 
     state.fields = relevantFields;
     renderForm(relevantFields);
@@ -421,9 +421,14 @@ function resetCsvUi() {
 
 // ---------- CSV template ----------
 
+const excludedFromInsert = new Set(["SystemModstamp", "LastModifiedDate", "LastModifiedById", "CreatedDate", "CreatedById"]);
+
+function isExcludedInsertField(name) {
+  return excludedFromInsert.has(name);
+}
+
 function getAllInsertableFieldNames() {
-  const excludedFromTemplate = new Set(["SystemModstamp", "LastModifiedDate", "LastModifiedById", "CreatedDate", "CreatedById"]);
-  return ["MasterLabel", "DeveloperName", ...state.fields.filter((f) => !excludedFromTemplate.has(f.name)).map((f) => f.name)];
+  return ["MasterLabel", "DeveloperName", ...state.fields.filter((f) => !isExcludedInsertField(f.name)).map((f) => f.name)];
 }
 
 function fieldTypeOf(name) {
