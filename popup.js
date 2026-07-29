@@ -470,7 +470,6 @@ async function submitRecord() {
     });
 
     const text = await resp.text();
-    addDebugLog(`Metadata deploy response: ${text}`);
 
     if (resp.ok) {
       setMsg(els.submitMsg, `Deployment accepted. Response: ${text}`, "success");
@@ -793,7 +792,6 @@ async function importAllCsvRows() {
     });
 
     const text = await resp.text();
-    addDebugLog(`Metadata deploy response: ${text}`);
 
     if (resp.ok) {
       setMsg(els.csvImportMsg, `Deployment accepted for ${validRows.length} record(s). Response: ${text}`, "success");
