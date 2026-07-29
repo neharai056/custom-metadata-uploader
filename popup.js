@@ -30,6 +30,8 @@ const els = {
   downloadResultsBtn: document.getElementById("downloadResultsBtn"),
   debugLog: document.getElementById("debugLog"),
   copyDebugBtn: document.getElementById("copyDebugBtn"),
+  authExample: document.getElementById("authExample"),
+  copyAuthBtn: document.getElementById("copyAuthBtn"),
 };
 
 let state = {
@@ -60,6 +62,18 @@ function addDebugLog(message) {
 function setStatus(kind, text) {
   els.connStatus.className = `status status--${kind}`;
   els.connStatus.textContent = text;
+}
+
+function refreshAuthExample() {
+  if (!els.authExample) return;
+  const instanceUrl = normalizeInstanceUrl(els.instanceUrl.value.trim()) || "https://your-org.my.salesforce.com";
+  const sessionId = els.sessionId.value.trim() || "YOUR_SESSION_ID";
+  const payload = JSON.stringify({ MasterLabel: "dfggg", DeveloperName: "ggg", Case_name__c: "ggg" });
+  const curl = `curl -X POST "${instanceUrl}/services/data/${API_VERSION}/sobjects/Booking_Config__mdt/" \\
+  -H "Authorization: Bearer ${sessionId}" \\
+  -H "Content-Type: application/json" \\
+  -d '${payload}'`;
+  els.authExample.textContent = curl;
 }
 
 function setMsg(el, text, kind) {
@@ -844,6 +858,20 @@ els.copyDebugBtn.addEventListener("click", async () => {
     setMsg(els.connectionMsg, `Could not copy debug log: ${err.message}`, "error");
   }
 });
+els.copyAuthBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(els.authExample.textContent || "");
+    setMsg(els.connectionMsg, "Auth example copied to clipboard.", "success");
+  } catch (err) {
+    setMsg(els.connectionMsg, `Could not copy auth example: ${err.message}`, "error");
+  }
+});
+
+[els.instanceUrl, els.sessionId].forEach((el) => {
+  el.addEventListener("input", refreshAuthExample);
+});
+
+refreshAuthExample();
 
 // Try auto-detect on popup open for convenience.
 autoDetectFromActiveTab();
