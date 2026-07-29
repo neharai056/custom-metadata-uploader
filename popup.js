@@ -28,12 +28,6 @@ const els = {
   csvImportMsg: document.getElementById("csvImportMsg"),
   csvResultsRow: document.getElementById("csvResultsRow"),
   downloadResultsBtn: document.getElementById("downloadResultsBtn"),
-  debugLog: document.getElementById("debugLog"),
-  copyDebugBtn: document.getElementById("copyDebugBtn"),
-  authExample: document.getElementById("authExample"),
-  copyAuthBtn: document.getElementById("copyAuthBtn"),
-  apexExample: document.getElementById("apexExample"),
-  copyApexBtn: document.getElementById("copyApexBtn"),
 };
 
 let state = {
@@ -44,22 +38,9 @@ let state = {
   csvRows: [], // parsed row objects, in submission order
   csvColumns: [], // header columns as found in the CSV
   csvResults: [], // per-row {row, status, message}
-  debugLines: [],
 };
 
 // ---------- helpers ----------
-
-function addDebugLog(message) {
-  const stamp = new Date().toLocaleTimeString();
-  const line = `[${stamp}] ${message}`;
-  state.debugLines.push(line);
-  if (state.debugLines.length > 80) {
-    state.debugLines = state.debugLines.slice(-80);
-  }
-  if (els.debugLog) {
-    els.debugLog.textContent = state.debugLines.join("\n");
-  }
-}
 
 function setStatus(kind, text) {
   els.connStatus.className = `status status--${kind}`;
@@ -69,19 +50,6 @@ function setStatus(kind, text) {
 function syncSessionState() {
   state.instanceUrl = normalizeInstanceUrl(els.instanceUrl.value.trim());
   state.sessionId = els.sessionId.value.trim();
-  refreshAuthExample();
-}
-
-function refreshAuthExample() {
-  if (!els.authExample) return;
-  const instanceUrl = normalizeInstanceUrl(els.instanceUrl.value.trim()) || "https://your-org.my.salesforce.com";
-  const sessionId = els.sessionId.value.trim() || "YOUR_SESSION_ID";
-  const payload = JSON.stringify({ MasterLabel: "dfggg", DeveloperName: "ggg", Case_name__c: "ggg" });
-  const curl = `curl -X POST "${instanceUrl}/services/data/${API_VERSION}/sobjects/Booking_Config__mdt/" \\
-  -H "Authorization: Bearer ${sessionId}" \\
-  -H "Content-Type: application/json" \\
-  -d '${payload}'`;
-  els.authExample.textContent = curl;
 }
 
 function escapeXml(value) {
@@ -130,11 +98,7 @@ function buildMetadataApiBody(records, typeName) {
 }
 
 function refreshApexExample() {
-  if (!els.apexExample) return;
-  const record = collectFormValues();
-  const typeName = state.selectedType || "Booking_Config__mdt";
-  const body = buildMetadataApiBody([record], typeName);
-  els.apexExample.textContent = body;
+  return;
 }
 
 function setMsg(el, text, kind) {
@@ -150,7 +114,6 @@ function normalizeInstanceUrl(url) {
 async function sfFetch(path, options = {}) {
   const cacheBust = options.noCache ? `${path.includes("?") ? "&" : "?"}_=${Date.now()}` : "";
   const url = `${state.instanceUrl}${path}${cacheBust}`;
-  addDebugLog(`Request -> ${options.method || "GET"} ${path}`);
   const resp = await fetch(url, {
     ...options,
     cache: options.noCache ? "no-store" : "default",
@@ -163,7 +126,6 @@ async function sfFetch(path, options = {}) {
   });
 
   const text = await resp.text().catch(() => "");
-  addDebugLog(`Response <- ${resp.status} ${path} ${text.slice(0, 220)}`);
   return new Response(text, {
     status: resp.status,
     statusText: resp.statusText,
@@ -178,7 +140,6 @@ async function autoDetectFromActiveTab() {
   setMsg(els.connectionMsg, "Detecting active tab...");
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    addDebugLog(`Auto-detect tab: ${tab && tab.url ? tab.url : "none"}`);
     if (!tab || !tab.url) throw new Error("No active tab found.");
     const tabUrl = new URL(tab.url);
     const hostname = tabUrl.hostname;
@@ -187,7 +148,6 @@ async function autoDetectFromActiveTab() {
       /salesforce\.com$|force\.com$|salesforce-setup\.com$|salesforce-sites\.com$/.test(hostname);
 
     if (!isSalesforceHost) {
-      addDebugLog(`Auto-detect rejected host: ${hostname}`);
       setMsg(
         els.connectionMsg,
         "Active tab doesn't look like a Salesforce page. Enter instance URL and session manually.",
@@ -215,7 +175,6 @@ async function autoDetectFromActiveTab() {
     }
 
     if (sidCookie) {
-      addDebugLog(`Auto-detect found sid cookie on ${hostname}`);
       els.sessionId.value = sidCookie.value;
       syncSessionState();
       setMsg(els.connectionMsg, "Detected instance URL and session. Click Connect.");
@@ -233,7 +192,6 @@ async function autoDetectFromActiveTab() {
 
 async function connect() {
   const instanceUrl = normalizeInstanceUrl(els.instanceUrl.value.trim());
-  addDebugLog(`Connect clicked with instance: ${instanceUrl}`);
   const sessionId = els.sessionId.value.trim();
   state.instanceUrl = instanceUrl;
   state.sessionId = sessionId;
@@ -253,7 +211,6 @@ async function connect() {
       throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
     }
     const data = await resp.json();
-    addDebugLog(`Connected successfully; discovered ${data.sobjects ? data.sobjects.length : 0} sobjects`);
     setStatus("ok", "Connected");
     setMsg(els.connectionMsg, "Connected successfully.", "success");
 
@@ -323,7 +280,6 @@ async function onTypeSelected() {
       throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
     }
     const describe = await resp.json();
-    addDebugLog(`Loaded describe for ${typeName}; fields=${describe.fields ? describe.fields.length : 0}`);
 
     // Fields we don't want to show / can't set directly.
     const excluded = new Set([
@@ -492,7 +448,6 @@ async function submitRecord() {
   }
 
   const record = collectFormValues();
-  addDebugLog(`Metadata API payload for ${state.selectedType}: ${JSON.stringify(record)}`);
 
   if (!record.MasterLabel || !record.DeveloperName) {
     setMsg(els.submitMsg, "Label and Name (Developer Name) are required.", "error");
@@ -816,7 +771,6 @@ async function importAllCsvRows() {
   const validRows = [];
   for (let idx = 0; idx < state.csvRows.length; idx++) {
     const record = csvRowToRecord(state.csvRows[idx]);
-    addDebugLog(`CSV row ${idx + 1} payload: ${JSON.stringify(record)}`);
 
     if (!record.MasterLabel || !record.DeveloperName) {
       state.csvResults[idx] = { status: "error", message: "Missing Label or Name" };
@@ -887,40 +841,11 @@ els.downloadTemplateBtn.addEventListener("click", downloadCsvTemplate);
 els.parseCsvBtn.addEventListener("click", handleParseCsv);
 els.importCsvBtn.addEventListener("click", importAllCsvRows);
 els.downloadResultsBtn.addEventListener("click", downloadResultsLog);
-els.copyDebugBtn.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(state.debugLines.join("\n"));
-    setMsg(els.connectionMsg, "Debug log copied to clipboard.", "success");
-  } catch (err) {
-    setMsg(els.connectionMsg, `Could not copy debug log: ${err.message}`, "error");
-  }
-});
-els.copyAuthBtn.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(els.authExample.textContent || "");
-    setMsg(els.connectionMsg, "Auth example copied to clipboard.", "success");
-  } catch (err) {
-    setMsg(els.connectionMsg, `Could not copy auth example: ${err.message}`, "error");
-  }
-});
-els.copyApexBtn.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(els.apexExample.textContent || "");
-    setMsg(els.connectionMsg, "Apex example copied to clipboard.", "success");
-  } catch (err) {
-    setMsg(els.connectionMsg, `Could not copy apex example: ${err.message}`, "error");
-  }
-});
-
 [els.instanceUrl, els.sessionId].forEach((el) => {
   el.addEventListener("input", syncSessionState);
 });
 
-els.recordForm.addEventListener("input", refreshApexExample);
-els.recordForm.addEventListener("change", refreshApexExample);
-
 syncSessionState();
-refreshApexExample();
 
 // Try auto-detect on popup open for convenience.
 autoDetectFromActiveTab();
