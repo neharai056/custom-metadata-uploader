@@ -63,11 +63,41 @@ async function sfFetch(path, options = {}) {
     ...options,
     headers: {
       Authorization: `Bearer ${state.sessionId}`,
+      Accept: "application/json",
       "Content-Type": "application/json",
       ...(options.headers || {}),
     },
   });
   return resp;
+}
+
+async function createRecord(typeName, record) {
+  const endpoints = [
+    `/services/data/${API_VERSION}/sobjects/${encodeURIComponent(typeName)}/`,
+    `/services/data/${API_VERSION}/sobjects/${encodeURIComponent(typeName)}`,
+  ];
+
+  let lastResult = null;
+
+  for (const endpoint of endpoints) {
+    const resp = await sfFetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(record),
+    });
+    const body = await resp.json().catch(() => null);
+
+    if (resp.ok && body && body.success) {
+      return { resp, body };
+    }
+
+    lastResult = { resp, body };
+
+    if (resp.status !== 400 && resp.status !== 404) {
+      break;
+    }
+  }
+
+  return lastResult;
 }
 
 // ---------- step 1: connection ----------
@@ -379,12 +409,7 @@ async function submitRecord() {
   setMsg(els.submitMsg, "Inserting record...");
 
   try {
-    const resp = await sfFetch(`/services/data/${API_VERSION}/sobjects/${state.selectedType}/`, {
-      method: "POST",
-      body: JSON.stringify(record),
-    });
-
-    const body = await resp.json().catch(() => null);
+    const { resp, body } = await createRecord(state.selectedType, record);
 
     if (resp.ok && body && body.success) {
       setMsg(els.submitMsg, `Record created successfully. Id: ${body.id}`, "success");
@@ -705,11 +730,7 @@ async function importAllCsvRows() {
     }
 
     try {
-      const resp = await sfFetch(`/services/data/${API_VERSION}/sobjects/${state.selectedType}/`, {
-        method: "POST",
-        body: JSON.stringify(record),
-      });
-      const body = await resp.json().catch(() => null);
+      const { resp, body } = await createRecord(state.selectedType, record);
 
       if (resp.ok && body && body.success) {
         state.csvResults[idx] = { status: "success", message: `Id: ${body.id}` };
