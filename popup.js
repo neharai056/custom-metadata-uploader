@@ -95,15 +95,15 @@ function escapeXml(value) {
 
 function buildMetadataValueXml(value) {
   if (value === null || value === undefined) {
-    return "<string></string>";
+    return `<value xsi:type="xsd:string"></value>`;
   }
   if (typeof value === "boolean") {
-    return `<boolean>${String(value)}</boolean>`;
+    return `<value xsi:type="xsd:boolean">${String(value)}</value>`;
   }
   if (typeof value === "number") {
-    return `<number>${String(value)}</number>`;
+    return `<value xsi:type="xsd:double">${String(value)}</value>`;
   }
-  return `<string>${escapeXml(String(value))}</string>`;
+  return `<value xsi:type="xsd:string">${escapeXml(String(value))}</value>`;
 }
 
 function buildCustomMetadataXml(typeName, record, index) {
@@ -111,142 +111,22 @@ function buildCustomMetadataXml(typeName, record, index) {
   const label = record.MasterLabel || `Record ${index + 1}`;
   const valuesXml = Object.entries(record)
     .filter(([key]) => !["MasterLabel", "DeveloperName"].includes(key))
-    .map(([key, value]) => `    <values>\n      <field>${escapeXml(key)}</field>\n      <value>${buildMetadataValueXml(value)}</value>\n    </values>`)
+    .map(([key, value]) => `      <met:values>\n        <met:field>${escapeXml(key)}</met:field>\n        ${buildMetadataValueXml(value)}\n      </met:values>`)
     .join("\n");
 
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<CustomMetadata xmlns="http://soap.sforce.com/2006/04/metadata">\n  <fullName>${escapeXml(`${typeName}.${developerName}`)}</fullName>\n  <label>${escapeXml(label)}</label>\n${valuesXml ? `${valuesXml}\n` : ""}</CustomMetadata>`;
+  return `<met:metadata xsi:type="CustomMetadata">\n  <met:fullName>${escapeXml(`${typeName}.${developerName}`)}</met:fullName>\n  <met:label>${escapeXml(label)}</met:label>\n${valuesXml ? `${valuesXml}\n` : ""}  </met:metadata>`;
 }
 
-function buildPackageXml(typeName, records) {
-  const members = records.map((record, index) => {
-    const developerName = record.DeveloperName || `Record_${index + 1}`;
-    return `${typeName}.${developerName}`;
-  });
+function buildMetadataSoapBody(typeName, records) {
+  const metadataXml = records
+    .map((record, index) => buildCustomMetadataXml(typeName, record, index))
+    .join("\n");
 
-  const memberXml = members.map((member) => `    <members>${escapeXml(member)}</members>`).join("\n");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<Package xmlns="http://soap.sforce.com/2006/04/metadata">\n  <types>\n${memberXml}\n    <name>CustomMetadata</name>\n  </types>\n  <version>${API_VERSION.replace("v", "")}</version>\n</Package>`;
-}
-
-function crc32(buffer) {
-  let crc = -1;
-  for (let i = 0; i < buffer.length; i += 1) {
-    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ buffer[i]) & 0xff];
-  }
-  return (crc ^ -1) >>> 0;
-}
-
-const CRC32_TABLE = (() => {
-  const table = [];
-  for (let n = 0; n < 256; n += 1) {
-    let c = n;
-    for (let k = 0; k < 8; k += 1) {
-      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    }
-    table[n] = c >>> 0;
-  }
-  return table;
-})();
-
-function buildZipBlob(files) {
-  const encoder = new TextEncoder();
-  const localEntries = [];
-  let offset = 0;
-
-  files.forEach(({ path, data }) => {
-    const bytes = typeof data === "string" ? encoder.encode(data) : data;
-    const fileNameBytes = encoder.encode(path);
-    const crc = crc32(bytes);
-    const localHeader = new Uint8Array(30);
-    const localView = new DataView(localHeader.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint16(6, 0, true);
-    localView.setUint16(8, 0, true);
-    localView.setUint16(10, 0, true);
-    localView.setUint16(12, 0, true);
-    localView.setUint32(14, crc, true);
-    localView.setUint32(18, bytes.length, true);
-    localView.setUint32(22, bytes.length, true);
-    localView.setUint16(26, fileNameBytes.length, true);
-    localView.setUint16(28, 0, true);
-
-    const entry = new Uint8Array(localHeader.length + fileNameBytes.length + bytes.length);
-    entry.set(localHeader, 0);
-    entry.set(fileNameBytes, localHeader.length);
-    entry.set(bytes, localHeader.length + fileNameBytes.length);
-    localEntries.push({ entry, fileNameBytes, bytes, crc, offset });
-    offset += entry.length;
-  });
-
-  const centralDirectory = [];
-  localEntries.forEach(({ fileNameBytes, bytes, crc, offset }) => {
-    const centralHeader = new Uint8Array(46);
-    const centralView = new DataView(centralHeader.buffer);
-    centralView.setUint32(0, 0x02014b50, true);
-    centralView.setUint16(4, 20, true);
-    centralView.setUint16(6, 20, true);
-    centralView.setUint16(8, 0, true);
-    centralView.setUint16(10, 0, true);
-    centralView.setUint16(12, 0, true);
-    centralView.setUint16(14, 0, true);
-    centralView.setUint32(16, crc, true);
-    centralView.setUint32(20, bytes.length, true);
-    centralView.setUint32(24, bytes.length, true);
-    centralView.setUint16(28, fileNameBytes.length, true);
-    centralView.setUint16(30, 0, true);
-    centralView.setUint16(32, 0, true);
-    centralView.setUint16(34, 0, true);
-    centralView.setUint16(36, 0, true);
-    centralView.setUint32(38, 0, true);
-    centralView.setUint32(42, offset, true);
-
-    const fullEntry = new Uint8Array(centralHeader.length + fileNameBytes.length);
-    fullEntry.set(centralHeader, 0);
-    fullEntry.set(fileNameBytes, centralHeader.length);
-    centralDirectory.push(fullEntry);
-  });
-
-  const centralDirectorySize = centralDirectory.reduce((sum, entry) => sum + entry.length, 0);
-  const centralDirectoryOffset = localEntries.reduce((sum, entry) => sum + entry.entry.length, 0);
-  const endRecord = new Uint8Array(22);
-  const endView = new DataView(endRecord.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(4, 0, true);
-  endView.setUint16(6, 0, true);
-  endView.setUint16(8, files.length, true);
-  endView.setUint16(10, files.length, true);
-  endView.setUint32(12, centralDirectorySize, true);
-  endView.setUint32(16, centralDirectoryOffset, true);
-  endView.setUint16(20, 0, true);
-
-  const zipData = new Uint8Array(centralDirectoryOffset + centralDirectorySize + endRecord.length);
-  let cursor = 0;
-  localEntries.forEach(({ entry }) => {
-    zipData.set(entry, cursor);
-    cursor += entry.length;
-  });
-  centralDirectory.forEach((entry) => {
-    zipData.set(entry, cursor);
-    cursor += entry.length;
-  });
-  zipData.set(endRecord, cursor);
-  return new Blob([zipData], { type: "application/zip" });
-}
-
-function buildMetadataPackage(records, typeName) {
-  const files = [
-    { path: "package.xml", data: buildPackageXml(typeName, records) },
-    ...records.map((record, index) => ({
-      path: `customMetadata/${typeName}.${record.DeveloperName || `Record_${index + 1}`}.md-meta.xml`,
-      data: buildCustomMetadataXml(typeName, record, index),
-    })),
-  ];
-  return buildZipBlob(files);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:met="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n  <soapenv:Header>\n    <met:SessionHeader>\n      <met:sessionId>${escapeXml(state.sessionId)}</met:sessionId>\n    </met:SessionHeader>\n  </soapenv:Header>\n  <soapenv:Body>\n    <met:upsertMetadata>\n${metadataXml}\n    </met:upsertMetadata>\n  </soapenv:Body>\n</soapenv:Envelope>`;
 }
 
 function buildMetadataApiBody(records, typeName) {
-  return buildMetadataPackage(records, typeName);
+  return buildMetadataSoapBody(typeName, records);
 }
 
 function refreshApexExample() {
@@ -254,7 +134,7 @@ function refreshApexExample() {
   const record = collectFormValues();
   const typeName = state.selectedType || "Booking_Config__mdt";
   const body = buildMetadataApiBody([record], typeName);
-  els.apexExample.textContent = `Package XML + CustomMetadata files prepared for deployment (${body.size} bytes)`;
+  els.apexExample.textContent = body;
 }
 
 function setMsg(el, text, kind) {
@@ -607,14 +487,13 @@ async function submitRecord() {
 
   try {
     const body = buildMetadataApiBody([record], state.selectedType);
-    const resp = await fetch(`${state.instanceUrl}/services/metadata/${API_VERSION}/deploy`, {
+    const resp = await fetch(`${state.instanceUrl}/services/Soap/m/${API_VERSION.replace("v", "")}`, {
       method: "POST",
       body,
       headers: {
         Authorization: `Bearer ${state.sessionId}`,
-        Accept: "application/json",
-        "Content-Type": "application/zip",
-        "Sforce-Disable-Feed-Tracking": "true",
+        "Content-Type": "text/xml; charset=UTF-8",
+        SOAPAction: "upsertMetadata",
       },
     });
 
@@ -932,14 +811,13 @@ async function importAllCsvRows() {
 
   try {
     const body = buildMetadataApiBody(validRows, state.selectedType);
-    const resp = await fetch(`${state.instanceUrl}/services/metadata/${API_VERSION}/deploy`, {
+    const resp = await fetch(`${state.instanceUrl}/services/Soap/m/${API_VERSION.replace("v", "")}`, {
       method: "POST",
       body,
       headers: {
         Authorization: `Bearer ${state.sessionId}`,
-        Accept: "application/json",
-        "Content-Type": "application/zip",
-        "Sforce-Disable-Feed-Tracking": "true",
+        "Content-Type": "text/xml; charset=UTF-8",
+        SOAPAction: "upsertMetadata",
       },
     });
 
