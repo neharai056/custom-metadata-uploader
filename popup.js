@@ -424,7 +424,8 @@ function resetCsvUi() {
 // ---------- CSV template ----------
 
 function getAllInsertableFieldNames() {
-  return ["MasterLabel", "DeveloperName", ...state.fields.map((f) => f.name)];
+  const excludedFromTemplate = new Set(["SystemModstamp", "LastModifiedDate", "LastModifiedById", "CreatedDate", "CreatedById"]);
+  return ["MasterLabel", "DeveloperName", ...state.fields.filter((f) => !excludedFromTemplate.has(f.name)).map((f) => f.name)];
 }
 
 function fieldTypeOf(name) {
