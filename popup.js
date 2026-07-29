@@ -213,13 +213,11 @@ async function onTypeSelected() {
       "Label",
     ]);
 
-    const editableFields = describe.fields.filter(
-      (f) => f.createable && !excluded.has(f.name)
-    );
+    const relevantFields = describe.fields.filter((f) => !excluded.has(f.name));
 
-    state.fields = editableFields;
-    renderForm(editableFields);
-    setMsg(els.typeMsg, `Loaded ${editableFields.length + 2} editable field(s).`, "success");
+    state.fields = relevantFields;
+    renderForm(relevantFields);
+    setMsg(els.typeMsg, `Loaded ${relevantFields.length + 2} field(s).`, "success");
     els.fieldsSection.hidden = false;
   } catch (err) {
     setMsg(els.typeMsg, `Failed to load fields: ${err.message}`, "error");
