@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Insert Custom Metadata</title>
+<link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Custom Metadata Inserter</h1>
+      <span id="connStatus" class="status status--unknown">Not connected</span>
+    </header>
+
+    <section id="connectionSection" class="card">
+      <h2>1. Connection</h2>
+      <label>Instance URL
+        <input type="text" id="instanceUrl" placeholder="https://yourOrg.my.salesforce.com" />
+      </label>
+      <label>Session / Access Token
+        <input type="password" id="sessionId" placeholder="Auto-detected from active tab if possible" />
+      </label>
+      <div class="row">
+        <button id="autoDetectBtn" class="secondary">Auto-detect from active tab</button>
+        <button id="connectBtn">Connect</button>
+      </div>
+      <p id="connectionMsg" class="msg"></p>
+    </section>
+
+    <section id="typeSection" class="card" hidden>
+      <h2>2. Choose Custom Metadata Type</h2>
+      <label>Metadata Type
+        <select id="typeSelect">
+          <option value="">-- Select a type --</option>
+        </select>
+      </label>
+      <p id="typeMsg" class="msg"></p>
+    </section>
+
+    <section id="fieldsSection" class="card" hidden>
+      <h2>3. Record Details</h2>
+      <form id="recordForm"></form>
+      <div class="row">
+        <button id="submitBtn">Insert Record</button>
+      </div>
+      <p id="submitMsg" class="msg"></p>
+    </section>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

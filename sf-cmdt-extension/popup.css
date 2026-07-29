@@ -1,0 +1,109 @@
+* { box-sizing: border-box; }
+
+body {
+  width: 380px;
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  margin: 0;
+  background: #f4f6f9;
+  color: #16232f;
+}
+
+.app { padding: 12px; }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+h1 { font-size: 15px; margin: 0; }
+h2 { font-size: 13px; margin: 0 0 8px 0; color: #3c4b5c; }
+
+.status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.status--unknown { background: #e5e9ee; color: #5c6b7a; }
+.status--ok { background: #d4f4dd; color: #1a7a3d; }
+.status--error { background: #fbdada; color: #a4181e; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e1e5ea;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #3c4b5c;
+}
+
+input, select, textarea {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid #cfd7e0;
+  border-radius: 5px;
+  font-family: inherit;
+}
+
+textarea { resize: vertical; min-height: 50px; }
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+button {
+  flex: 1;
+  background: #0176d3;
+  color: #fff;
+  border: none;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 5px;
+  cursor: pointer;
+}
+button:hover { background: #01579b; }
+button.secondary {
+  background: #eef2f6;
+  color: #3c4b5c;
+}
+button.secondary:hover { background: #dfe5eb; }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.msg {
+  font-size: 11px;
+  margin: 8px 0 0 0;
+  white-space: pre-wrap;
+}
+.msg.error { color: #a4181e; }
+.msg.success { color: #1a7a3d; }
+
+.field-block {
+  margin-bottom: 10px;
+}
+.field-hint {
+  font-size: 10px;
+  font-weight: 400;
+  color: #7a8794;
+  display: block;
+  margin-top: 2px;
+}
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.checkbox-row input { width: auto; margin: 0; }
